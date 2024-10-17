@@ -1,0 +1,290 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Search</title>
+    <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
+    <style>
+        body {
+            background-color: #121212; /* 深色背景 */
+            color: #00ff00; /* 绿色文本 */
+            font-family: 'Courier New', Courier, monospace; /* 使用等宽字体 */
+        }
+
+        h1 {
+            border-bottom: 1px solid #00ff00; /* 标题底部边框 */
+            padding-bottom: 10px;
+        }
+
+        .form-control, .form-select {
+            background-color: #1e1e1e; /* 深色输入框 */
+            color: #00ff00; /* 输入框文本颜色 */
+            border: 1px solid #00ff00; /* 输入框边框颜色 */
+        }
+
+        .form-control::placeholder {
+            color: #00ff00; /* 输入框占位符颜色 */
+        }
+
+        .btn-primary {
+            background-color: #00ff00; /* 按钮颜色 */
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #009900; /* 悬停时按钮颜色 */
+        }
+
+        .table {
+            background-color: #1e1e1e; /* 表格背景颜色 */
+            border-color: #00ff00; /* 表格边框颜色 */
+        }
+
+        .table th, .table td {
+            color: #00ff00; /* 表格文本颜色 */
+            border-color: #00ff00; /* 表格单元格边框颜色 */
+        }
+
+        .pagination .page-item.active .page-link {
+            background-color: #00ff00; /* 当前页按钮颜色 */
+            color: #000000; /* 当前页按钮文本颜色 */
+        }
+
+        .pagination .page-link {
+            color: #00ff00; /* 页码链接颜色 */
+        }
+
+        .pagination .page-item.disabled .page-link {
+            color: #555; /* 禁用状态链接颜色 */
+        }
+
+        .btn-warning {
+            background-color: #ff4500; /* 获取Cookie按钮颜色 */
+            border: none;
+        }
+
+        .btn-warning:hover {
+            background-color: #cc3700; /* 悬停时按钮颜色 */
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">User Search</h1>
+
+        <!-- 搜索和筛选部分 -->
+        <div class="row mb-3">
+            <div class="col-md-8">
+                <input type="text" id="search-input" class="form-control" placeholder="学号/姓名">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary" id="search-btn">查询</button>
+            </div>
+        </div>
+
+        <!-- 筛选条件 -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <select id="college-select" class="form-select">
+                    <option value="">学院</option>
+                    <!-- 动态加载学院 -->
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="major-select" class="form-select">
+                    <option value="">专业</option>
+                    <!-- 动态加载专业 -->
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="text" id="grade-input" class="form-control" placeholder="年级">
+            </div>
+        </div>
+
+        <!-- 结果列表 -->
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>学号</th>
+                    <th>姓名</th>
+                    <th>学院</th>
+                    <th>专业</th>
+                    <th>生源地</th>
+                    <th>照片（链接）</th>
+                </tr>
+            </thead>
+            <tbody id="result-table-body">
+                <!-- 动态加载查询结果 -->
+            </tbody>
+        </table>
+
+        <!-- 分页控件 -->
+        <nav>
+            <ul class="pagination" id="pagination">
+                <!-- 动态加载分页 -->
+            </ul>
+        </nav>
+
+        <!-- 获取Cookie -->
+        <button class="btn btn-warning mt-3" id="get-cookie-btn">获取Cookie</button>
+    </div>
+
+    <script>
+    $(document).ready(function() {
+        // 页面加载时获取学院列表
+        $.ajax({
+            url: '/get-colleges/',  // 替换为获取学院列表的实际路径
+            type: 'GET',
+            success: function(response) {
+                const collegeSelect = $('#college-select');
+                response.colleges.forEach(function(college) {
+                    collegeSelect.append(`<option value="${college.id}">${college.name}</option>`);
+                });
+            },
+            error: function(error) {
+                console.log("Error loading colleges:", error);
+            }
+        });
+
+        // 当选择学院时，动态加载对应专业
+        $('#college-select').on('change', function() {
+            const collegeId = $(this).val();
+            const majorSelect = $('#major-select');
+            majorSelect.empty().append('<option value="">专业</option>'); // 清空并重置专业选项
+
+            if (collegeId) {
+                $.ajax({
+                    url: `/get-majors/${collegeId}/`,  // 替换为获取专业列表的实际路径
+                    type: 'GET',
+                    success: function(response) {
+                        response.majors.forEach(function(major) {
+                            majorSelect.append(`<option value="${major.id}">${major.name}</option>`);
+                        });
+                    },
+                    error: function(error) {
+                        console.log("Error loading majors:", error);
+                    }
+                });
+            }
+        });
+
+        // 发送查询请求
+        function fetchResults(page = 1) {
+            const searchQuery = $('#search-input').val();
+            const college = $('#college-select').val();
+            const major = $('#major-select').val();
+            const grade = $('#grade-input').val();
+
+            // JSON 请求数据
+            const requestData = {
+                search_query: searchQuery,
+                college: college,
+                major: major,
+                grade: grade,
+                page: page,
+                page_size: 10  // 每页显示的条数
+            };
+
+            $.ajax({
+                url: '/user-search/',  // 替换为实际的API路径
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(response) {
+                    const results = response.results;
+                    const tableBody = $('#result-table-body');
+                    const pagination = $('#pagination');
+                    tableBody.empty();
+                    pagination.empty(); // 清空之前的分页
+
+                    // 动态生成表格行
+                    results.forEach(function(result) {
+                        tableBody.append(`
+                            <tr>
+                                <td>${result.open_id}</td>
+                                <td>${result.nickname}</td>
+                                <td>${result.org_name}</td>
+                                <td>${result.major_name}</td>
+                                <td>${result.hometown}</td>
+                                <td><a href="${result.photo_url}" target="_blank">照片</a></td>
+                            </tr>
+                        `);
+                    });
+
+                    // 生成分页按钮，最多显示 5 个页码，当前页的前后各两个页码
+                    const totalPages = response.total_pages;
+                    const maxVisiblePages = 5; // 最大可见页码数
+                    let startPage, endPage;
+
+                    if (totalPages <= maxVisiblePages) {
+                        startPage = 1;
+                        endPage = totalPages;
+                    } else {
+                        startPage = Math.max(1, page - 2);
+                        endPage = Math.min(totalPages, page + 2);
+
+                        if (startPage === 1) {
+                            endPage = Math.min(maxVisiblePages, totalPages);
+                        } else if (endPage === totalPages) {
+                            startPage = Math.max(1, totalPages - maxVisiblePages + 1);
+                        }
+                    }
+
+                    // 添加省略号和页码按钮
+                    for (let i = startPage; i <= endPage; i++) {
+                        pagination.append(`
+                            <li class="page-item ${i === page ? 'active' : ''}">
+                                <a class="page-link" href="#" data-page="${i}">${i}</a>
+                            </li>
+                        `);
+                    }
+
+                    // 添加省略号
+                    if (startPage > 1) {
+                        pagination.prepend(`
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        `);
+                    }
+
+                    if (endPage < totalPages) {
+                        pagination.append(`
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        `);
+                    }
+                },
+                error: function(error) {
+                    console.log("Error:", error);
+                }
+            });
+        }
+
+        // 初始查询
+        $('#search-btn').on('click', function() {
+            fetchResults();
+        });
+
+        // 分页按钮点击事件
+        $(document).on('click', '.page-link', function(event) {
+            event.preventDefault(); // 阻止默认链接行为
+            const page = $(this).data('page');
+            fetchResults(page);
+        });
+
+        // 获取Cookie的按钮事件
+        $('#get-cookie-btn').on('click', function() {
+            // 跳转到获取 Cookie 的新页面
+            const cookieUrl = 'https://authserver.hlju.edu.cn/authserver/login';  // 替换为实际的 Cookie URL
+            window.location.href = cookieUrl;  // 跳转到指定的 URL
+        });
+    });
+    </script>
+
+</body>
+</html>
